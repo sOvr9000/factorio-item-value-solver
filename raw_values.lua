@@ -1,0 +1,50 @@
+return {
+    nauvis = {
+        ["wood"] = 5,
+        ["iron-ore"] = 1,
+        ["copper-ore"] = 0.8,
+        ["stone"] = 0.6,
+        ["coal"] = 1.2,
+        ["uranium-ore"] = 4,
+        ["water"] = 0.01,
+        ["crude-oil"] = 0.1,
+        ["biter-egg"] = 900.1,
+        ["raw-fish"] = 25,
+    },
+    vulcanus = {
+        ["coal"] = 15,
+        ["calcite"] = 50,
+        ["tungsten-ore"] = 200,
+        ["sulfuric-acid"] = 1.0,
+        ["lava"] = 0.5,
+    },
+    fulgora = {
+        ["heavy-oil"] = 6,
+        ["scrap"] = 86,
+    },
+    gleba = {
+        ["stone"] = 50,
+        ["water"] = 0.1,
+        ["yumako"] = 100,
+        ["jellynut"] = 150,
+        ["iron-bacteria"] = 60,
+        ["copper-bacteria"] = 72,
+        ["wood"] = 150,
+        ["pentapod-egg"] = 1440,
+        ["spoilage"] = 50,
+    },
+    aquilo = {
+        ["ammoniacal-solution"] = 120,
+        ["fluorine"] = 480,
+        ["lithium-brine"] = 540,
+        ["crude-oil"] = 360,
+        ["promethium-asteroid-chunk"] = 1500,
+        ["hexaprism"] = 1000000000, -- 1000 gravity coins
+    },
+    -- ["space-platform"] = {
+    --     ["metallic-asteroid-chunk"] = 8,
+    --     ["carbonic-asteroid-chunk"] = 12,
+    --     ["oxide-asteroid-chunk"] = 11,
+    --     ["promethium-asteroid-chunk"] = 500,
+    -- },
+}
