@@ -85,14 +85,6 @@ The solver outputs:
 - Sample values for key items per planet
 - Top 10 most valuable items
 
-## Planet-Specific Considerations
-
-- **Nauvis**: Standard recipe chains, uranium processing
-- **Vulcanus**: Lava-based metallurgy, tungsten processing
-- **Fulgora**: Scrap recycling, holmium chemistry
-- **Gleba**: Biological production, spoilage mechanics, interplanetary imports
-- **Aquilo**: High-tech processing, heavy interplanetary dependency
-
 ## Customization
 
 To adapt the solver for your needs:
@@ -104,7 +96,9 @@ To adapt the solver for your needs:
 
 ## License
 
-This project is provided as-is for Factorio community use.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+Copyright (c) 2024 sOvr9000
 
 ## Acknowledgments
 
