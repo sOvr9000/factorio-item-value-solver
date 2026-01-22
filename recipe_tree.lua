@@ -1426,7 +1426,7 @@ return {
     energy = 1,
     ingredients = {
       {
-        amount = 40,
+        amount = 25,
         name = "molten-iron"
       }
     },
@@ -1518,7 +1518,7 @@ return {
         name = "firearm-magazine"
       },
       {
-        amount = 25,
+        amount = 10,
         name = "molten-iron"
       },
       {
@@ -2135,7 +2135,7 @@ return {
     }
   },
   ["demolisher-capsule"] = {
-    energy = 1,
+    energy = 20,
     ingredients = {
       {
         amount = 10,
@@ -2427,6 +2427,66 @@ return {
       {
         amount = 15,
         name = "electrolyte"
+      }
+    }
+  },
+  ["electromagnetic-penetrator"] = {
+    energy = 20,
+    ingredients = {
+      {
+        amount = 8,
+        name = "hexaprism"
+      },
+      {
+        amount = 25,
+        name = "quantum-processor"
+      },
+      {
+        amount = 1,
+        name = "railgun"
+      },
+      {
+        amount = 1,
+        name = "teslagun"
+      },
+      {
+        amount = 400,
+        name = "fluoroketone-cold"
+      }
+    },
+    name = "electromagnetic-penetrator",
+    products = {
+      {
+        amount = 1,
+        name = "electromagnetic-penetrator"
+      },
+      {
+        amount = 200,
+        name = "fluoroketone-hot"
+      }
+    }
+  },
+  ["electromagnetic-penetrator-cell"] = {
+    energy = 50,
+    ingredients = {
+      {
+        amount = 4,
+        name = "hexaprism"
+      },
+      {
+        amount = 1,
+        name = "railgun-ammo"
+      },
+      {
+        amount = 10,
+        name = "tesla-ammo"
+      }
+    },
+    name = "electromagnetic-penetrator-cell",
+    products = {
+      {
+        amount = 1,
+        name = "electromagnetic-penetrator-cell"
       }
     }
   },
@@ -6828,8 +6888,8 @@ return {
         name = "fusion-generator"
       },
       {
-        amount = 4,
-        name = "teslagun"
+        amount = 6,
+        name = "electromagnetic-penetrator"
       },
       {
         amount = 1000,

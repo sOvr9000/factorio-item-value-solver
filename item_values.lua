@@ -82,6 +82,12 @@ function item_values.calculate(recipe_graph, raw_values, allowed_recipes, other_
         params.backward_calculation_coefficient = 0.1
     end
 
+    if not params.min_selection_weight then
+        -- Weight for minimum selection vs averaging (1.0 = pure minimum, 0.0 = pure average)
+        -- Higher values favor the cheapest production path, lower values smooth across all recipes
+        params.min_selection_weight = 0.7
+    end
+
     if not params.initial_values then
         -- The initial values of all items
         params.initial_values = {}
@@ -112,8 +118,8 @@ function item_values.calculate(recipe_graph, raw_values, allowed_recipes, other_
     -- Values table
     local values = {}
 
-    -- Increments table
-    local increments = {}
+    -- Target values table (stores suggested values from each recipe, for minimum selection)
+    local target_values = {}
 
     -- Update sensitivity, to be decayed after each iteration
     local update_sensitivity = params.update_sensitivity
@@ -195,10 +201,10 @@ function item_values.calculate(recipe_graph, raw_values, allowed_recipes, other_
             end
         end
 
-        -- For each iteration, reset all increments
+        -- For each iteration, reset all target values
         local total_abs_increment = 0
         for _, item_name in pairs(recipe_graph.all_items) do
-            increments[item_name] = {}
+            target_values[item_name] = {}
         end
 
         -- Calculate the increments
@@ -324,28 +330,28 @@ function item_values.calculate(recipe_graph, raw_values, allowed_recipes, other_
                             log_item_calculation(item_name, "  Number of non-raw products: " .. (#products - num_raw))
                         end
 
-                        -- Calculate increments based on the new per-product scaled value to each product, skipping raw values
+                        -- Calculate target values based on the new per-product scaled value to each product, skipping raw values
                         for _, prod in pairs(products) do
                             if not is_raw_or_interplanetary(prod.name) then
                                 -- The per-product value is scaled, so rescale it to get the correct value for the item.
                                 local new_value = per_product_scaled_value / prod.amount
 
-                                -- Calculate an increment (one of multiple, possibly) for the item based on what it currently is and what it should become
-                                local increment = new_value - values[prod.name]
+                                -- If swapped (doing backward calculation from products to ingredients), skip if coefficient is 0
+                                if swapped and params.backward_calculation_coefficient == 0 then
+                                    -- Skip backward calculations when coefficient is 0
+                                else
+                                    -- Store the target value suggested by this recipe
+                                    -- Use a unique key for forward vs backward to allow both directions
+                                    local key = recipe_name .. (swapped and "_bwd" or "_fwd")
+                                    target_values[prod.name][key] = new_value
 
-                                -- If swapped (doing backward calculation from products to ingredients), then scale down the adjustment so that calculations focus much more on direct production of the given item as opposed to complex recipe chains requiring that item.
-                                if swapped then
-                                    increment = increment * params.backward_calculation_coefficient
-                                end
-
-                                increments[prod.name][recipe_name] = (increments[prod.name][recipe_name] or 0) + increment
-
-                                if params.tracked_calculations[prod.name] then
-                                    log_item_calculation(prod.name, "  Calculated for " .. prod.name .. ":")
-                                    log_item_calculation(prod.name, "    - New value: " .. new_value)
-                                    log_item_calculation(prod.name, "    - Current value: " .. values[prod.name])
-                                    log_item_calculation(prod.name, "    - Increment: " .. increment)
-                                    log_item_calculation(prod.name, "    - Recipe: " .. recipe_name)
+                                    if params.tracked_calculations[prod.name] then
+                                        log_item_calculation(prod.name, "  Calculated for " .. prod.name .. ":")
+                                        log_item_calculation(prod.name, "    - Target value: " .. new_value)
+                                        log_item_calculation(prod.name, "    - Current value: " .. values[prod.name])
+                                        log_item_calculation(prod.name, "    - Recipe: " .. key)
+                                        log_item_calculation(prod.name, "    - Direction: " .. (swapped and "backward" or "forward"))
+                                    end
                                 end
                             end
                         end
@@ -357,92 +363,87 @@ function item_values.calculate(recipe_graph, raw_values, allowed_recipes, other_
             end
         end
 
-        -- Apply increments
+        -- Apply target values using minimum selection
         for tracked_item, _ in pairs(params.tracked_calculations) do
-            if increments[tracked_item] then
-                log_item_calculation(tracked_item, "Applying increments for " .. tracked_item .. ":")
-                -- Count number of increments
-                local num_increments = 0
-                for recipe_name, increment in pairs(increments[tracked_item]) do
-                    num_increments = num_increments + 1
-                    log_item_calculation(tracked_item, "  From recipe " .. recipe_name .. ": " .. increment)
+            if target_values[tracked_item] then
+                log_item_calculation(tracked_item, "Target values for " .. tracked_item .. ":")
+                for recipe_name, target in pairs(target_values[tracked_item]) do
+                    log_item_calculation(tracked_item, "  From recipe " .. recipe_name .. ": " .. target)
                 end
-                log_item_calculation(tracked_item, "  Total number of increments: " .. num_increments)
             end
         end
 
-        for item_name, increments_for_item in pairs(increments) do
-            -- Calculate how many increments there are for this item
-            local num_increments = 0
-            for _ in pairs(increments_for_item) do
-                num_increments = num_increments + 1
+        for item_name, targets_for_item in pairs(target_values) do
+            -- Count how many target values there are for this item
+            local num_targets = 0
+            for _ in pairs(targets_for_item) do
+                num_targets = num_targets + 1
             end
 
             -- Hold raw values constant (this shouldn't be necessary, but it's a failsafe)
             if not is_raw_or_interplanetary(item_name) then
-                -- If there are any increments, then calculate the average increment for this item
-                if num_increments > 0 then
-                    -- Calculate the mean of the increments for this item
-                    local avg_increment = 0
+                -- If there are any target values, find the minimum (cheapest production path)
+                if num_targets > 0 then
+                    -- Find minimum and average target values across all recipes
+                    local min_target = math.huge
+                    local min_recipe = nil
+                    local sum_target = 0
 
                     if params.tracked_calculations[item_name] then
-                        log_item_calculation(item_name, "Calculating average increment:")
+                        log_item_calculation(item_name, "Finding target values:")
                     end
 
-                    for recipe_name, increment in pairs(increments_for_item) do
-                        -- Retrieve the graph depth of the recipe
-                        local depth = recipe_graph.recipe_bfs_depths[recipe_name] or 0
-
-                        -- Scale the increment by the depth of the recipe so that recipes using more complex items have a lesser impact on the item value
-                        -- And sqrt() because large increments are more likely to be outliers like kovarex enrichment vs. uranium processing
-                        local inc = increment / ((depth + 1) ^ 1)
-                        local sqrt_inc = 0
-                        if increment > 0 then
-                            if inc > 1 then
-                                sqrt_inc = math.sqrt(inc)
-                            else
-                                -- sqrt_inc = inc * inc
-                                sqrt_inc = math.sqrt(inc)
-                            end
-                        else
-                            if inc < -1 then
-                                sqrt_inc = -math.sqrt(-inc)
-                            else
-                                -- sqrt_inc = -inc * inc
-                                sqrt_inc = -math.sqrt(-inc)
-                            end
-                        end
-                        avg_increment = avg_increment + sqrt_inc
-
+                    for recipe_name, target in pairs(targets_for_item) do
                         if params.tracked_calculations[item_name] then
-                            log_item_calculation(item_name, "  Recipe " .. recipe_name .. ":")
-                            log_item_calculation(item_name, "    - Depth: " .. depth)
-                            log_item_calculation(item_name, "    - Raw increment: " .. increment)
-                            log_item_calculation(item_name, "    - Depth-scaled increment: " .. inc)
-                            log_item_calculation(item_name, "    - Sqrt-scaled increment: " .. sqrt_inc)
-                            log_item_calculation(item_name, "    - Running avg: " .. avg_increment)
+                            log_item_calculation(item_name, "  Recipe " .. recipe_name .. ": " .. target)
+                        end
+
+                        sum_target = sum_target + target
+                        if target < min_target then
+                            min_target = target
+                            min_recipe = recipe_name
                         end
                     end
 
-                    -- Divide by the number of increments to get the average increment (average of square roots technically speaking)
-                    avg_increment = avg_increment / num_increments
+                    local avg_target = sum_target / num_targets
+
+                    -- Blend minimum and average based on min_selection_weight
+                    -- weight=1.0 means pure minimum, weight=0.0 means pure average
+                    local blended_target = params.min_selection_weight * min_target + (1 - params.min_selection_weight) * avg_target
 
                     if params.tracked_calculations[item_name] then
-                        log_item_calculation(item_name, "  Final average increment: " .. avg_increment)
+                        log_item_calculation(item_name, "  Minimum target: " .. min_target .. " (from " .. (min_recipe or "unknown") .. ")")
+                        log_item_calculation(item_name, "  Average target: " .. avg_target)
+                        log_item_calculation(item_name, "  Blended target (weight=" .. params.min_selection_weight .. "): " .. blended_target)
+                    end
+
+                    -- Calculate increment from blended target value
+                    local raw_increment = blended_target - values[item_name]
+
+                    -- Apply sqrt dampening to prevent large jumps (preserving sign)
+                    local increment
+                    if raw_increment > 0 then
+                        increment = math.sqrt(raw_increment)
+                    elseif raw_increment < 0 then
+                        increment = -math.sqrt(-raw_increment)
+                    else
+                        increment = 0
                     end
 
                     -- Retrieve the graph depth of the item
                     local depth = recipe_graph.item_bfs_depths[item_name] or 0
 
-                    -- Scale up the increment for deeper items because they generally have more unpredictable adjustments initially
-                    local depth_scaled = avg_increment * ((1 + depth) ^ params.depth_sensitivity)
+                    -- Scale the increment for deeper items (negative depth_sensitivity means deeper = smaller adjustments)
+                    local depth_scaled = increment * ((1 + depth) ^ params.depth_sensitivity)
 
                     -- Scale down the increment so that the dynamical system can actually converge to an equilibrium
                     local final_increment = depth_scaled * cur_update_sensitivity
 
                     if params.tracked_calculations[item_name] then
+                        log_item_calculation(item_name, "  Current value: " .. values[item_name])
+                        log_item_calculation(item_name, "  Raw increment: " .. raw_increment)
+                        log_item_calculation(item_name, "  Sqrt-dampened increment: " .. increment)
                         log_item_calculation(item_name, "  Item depth: " .. depth)
-                        log_item_calculation(item_name, "  Depth sensitivity: " .. params.depth_sensitivity)
                         log_item_calculation(item_name, "  Depth scaling factor: " .. ((1 + depth) ^ params.depth_sensitivity))
                         log_item_calculation(item_name, "  After depth scaling: " .. depth_scaled)
                         log_item_calculation(item_name, "  Current update sensitivity: " .. cur_update_sensitivity)
@@ -492,14 +493,16 @@ function item_values.calculate(recipe_graph, raw_values, allowed_recipes, other_
             print(serpent.block(values))
         end
 
-        -- Decay update sensitivity
-        update_sensitivity = update_sensitivity * params.update_sensitivity_decay
-        cur_update_sensitivity = update_sensitivity * math.log(total_abs_increment) * 0.0625
-
         -- Check if the dynamical system has converged to an acceptable equilibrium
         if total_abs_increment < params.convergence_threshold then
+            log("Converged after " .. n .. " iterations (total_abs_increment = " .. total_abs_increment .. ")")
             break
         end
+
+        -- Decay update sensitivity
+        update_sensitivity = update_sensitivity * params.update_sensitivity_decay
+        -- Ensure total_abs_increment is at least 1 to avoid negative log values
+        cur_update_sensitivity = update_sensitivity * math.log(math.max(1, total_abs_increment)) * 0.0625
     end
 
     return values

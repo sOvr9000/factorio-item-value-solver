@@ -187,7 +187,7 @@ elseif PLANET_NAME == "aquilo" then
     values = item_values.calculate(graph, raw_values.aquilo, sets.new(allowed_recipes.aquilo), {}, spoilable_items, {
         logging = true,
         max_iterations = 100000,
-        convergence_threshold = 1,
+        convergence_threshold = 0.01,
         energy_coefficient = 0.10,
         item_complexity_coefficient = 0.35,
         fluid_complexity_coefficient = 0.45,
